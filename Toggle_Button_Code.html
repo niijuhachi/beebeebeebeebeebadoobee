@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hive Cell &amp; Honey Yield Estimator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #1a1108;
+    --bg-2: #241708;
+    --surface: #2c1c0d;
+    --surface-2: #35240f;
+    --hairline: #4a3319;
+    --gold: #e7a83a;
+    --gold-deep: #c67f24;
+    --wax: #f2d9a1;
+    --parchment: #f6ecd9;
+    --muted: #b79a72;
+    --muted-2: #8a744f;
+    --good: #9bc06a;
+  }
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg: #faf5ea;
+      --bg-2: #f3ead6;
+      --surface: #fffdf8;
+      --surface-2: #fbf2df;
+      --hairline: #e3d3ac;
+      --gold: #c67f24;
+      --gold-deep: #a3651a;
+      --wax: #6b4a1c;
+      --parchment: #2c1c0d;
+      --muted: #7a6541;
+      --muted-2: #96844f;
+      --good: #4f7a2e;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg: #faf5ea;
+    --bg-2: #f3ead6;
+    --surface: #fffdf8;
+    --surface-2: #fbf2df;
+    --hairline: #e3d3ac;
+    --gold: #c67f24;
+    --gold-deep: #a3651a;
+    --wax: #6b4a1c;
+    --parchment: #2c1c0d;
+    --muted: #7a6541;
+    --muted-2: #96844f;
+    --good: #4f7a2e;
+  }
+
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 15% 8%, color-mix(in srgb, var(--gold) 10%, transparent), transparent 40%),
+      radial-gradient(circle at 85% 90%, color-mix(in srgb, var(--gold-deep) 8%, transparent), transparent 45%);
+    color: var(--parchment);
+    font-family: 'Inter', system-ui, sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .hexbg{
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    opacity: 0.35;
+    pointer-events: none;
+    background-image: var(--hex-pattern);
+    background-size: 84px 96px;
+  }
+
+  .wrap{
+    position: relative;
+    z-index: 1;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+
+  header{
+    margin-bottom: 40px;
+  }
+  .eyebrow-row{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .hex-icon{
+    width: 30px; height: 30px;
+    flex-shrink: 0;
+  }
+  .kicker{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+  h1{
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: clamp(32px, 6vw, 46px);
+    line-height: 1.08;
+    margin: 0 0 14px;
+    color: var(--wax);
+    max-width: 14ch;
+  }
+  .sub{
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--muted);
+    max-width: 54ch;
+    margin: 0;
+  }
+  .sub a{ color: var(--gold); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--gold) 50%, transparent); }
+
+  .panel{
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 18px;
+    padding: 32px;
+    margin-bottom: 24px;
+  }
+
+  .field{
+    margin-bottom: 28px;
+  }
+  .field:last-child{ margin-bottom: 0; }
+  .field-label{
+    display:flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 12px;
+  }
+  .field-label label{
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--parchment);
+  }
+  .field-hint{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--muted-2);
+  }
+  .value-badge{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--gold);
+    background: color-mix(in srgb, var(--gold) 14%, transparent);
+    padding: 3px 12px;
+    border-radius: 999px;
+    min-width: 3ch;
+    text-align: center;
+  }
+
+  input[type="range"]{
+    -webkit-appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    outline: none;
+    border: 1px solid var(--hairline);
+  }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance: none;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--gold);
+    border: 3px solid var(--bg-2);
+    box-shadow: 0 0 0 1px var(--gold-deep);
+    cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb{
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--gold);
+    border: 3px solid var(--bg-2);
+    box-shadow: 0 0 0 1px var(--gold-deep);
+    cursor: pointer;
+  }
+
+  .age-row{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .age-btn{
+    font-family: 'IBM Plex Mono', monospace;
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    color: var(--muted);
+    padding: 12px 6px;
+    border-radius: 10px;
+    font-size: 14px;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  .age-btn:hover{ border-color: var(--gold-deep); color: var(--parchment); }
+  .age-btn.active{
+    background: color-mix(in srgb, var(--gold) 16%, var(--surface-2));
+    border-color: var(--gold);
+    color: var(--gold);
+    font-weight: 600;
+  }
+  .field-note{
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--muted-2);
+    line-height: 1.5;
+  }
+
+  .adv-toggle{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    cursor: pointer;
+    padding: 0;
+    margin-top: 4px;
+  }
+  .adv-toggle:hover{ color: var(--gold); }
+  .adv-toggle svg{ transition: transform .15s ease; width:12px; height:12px; }
+  .adv-toggle.open svg{ transform: rotate(90deg); }
+  .adv-body{
+    display: none;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px dashed var(--hairline);
+  }
+  .adv-body.open{ display:block; }
+  .adv-field{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+  .adv-field:last-child{ margin-bottom:0; }
+  .adv-field label{ font-size: 13.5px; color: var(--muted); flex-shrink:0; }
+  .adv-field input[type="number"]{
+    font-family: 'IBM Plex Mono', monospace;
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    color: var(--parchment);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 14px;
+    width: 130px;
+    text-align: right;
+  }
+  .adv-field input[type="number"]:focus{ outline: none; border-color: var(--gold); }
+  .adv-reset{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--gold);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+    margin-top: 4px;
+  }
+
+  .results{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 560px){
+    .results{ grid-template-columns: 1fr; }
+  }
+  .result-card{
+    background: linear-gradient(165deg, var(--surface-2), var(--surface));
+    border: 1px solid var(--hairline);
+    border-radius: 18px;
+    padding: 26px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .result-card::before{
+    content: "";
+    position: absolute;
+    top: -30px; right: -30px;
+    width: 110px; height: 110px;
+    background: var(--result-hex);
+    background-size: contain;
+    opacity: 0.5;
+  }
+  .result-label{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .result-value{
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: clamp(28px, 5vw, 36px);
+    color: var(--gold);
+    line-height: 1.1;
+    position: relative;
+  }
+  .result-unit{
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    color: var(--muted);
+    font-weight: 500;
+    margin-left: 6px;
+  }
+  .result-sub{
+    margin-top: 8px;
+    font-size: 12.5px;
+    color: var(--muted-2);
+    position: relative;
+    line-height: 1.5;
+  }
+
+  details.method{
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 18px;
+    padding: 4px 32px;
+  }
+  details.method summary{
+    cursor: pointer;
+    padding: 20px 0;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--parchment);
+    list-style: none;
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+  }
+  details.method summary::-webkit-details-marker{ display:none; }
+  details.method summary .chev{
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--muted-2);
+    font-size: 18px;
+    transition: transform .2s ease;
+  }
+  details.method[open] summary .chev{ transform: rotate(45deg); }
+  .method-body{
+    padding-bottom: 26px;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.75;
+  }
+  .method-body h4{
+    color: var(--parchment);
+    font-size: 13.5px;
+    margin: 20px 0 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+  }
+  .method-body h4:first-child{ margin-top: 0; }
+  .formula{
+    font-family: 'IBM Plex Mono', monospace;
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: var(--gold);
+    font-size: 13.5px;
+    margin: 10px 0;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .method-body ul{ padding-left: 18px; margin: 8px 0; }
+  .method-body li{ margin-bottom: 4px; }
+  .stat-row{
+    display:flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin: 14px 0;
+  }
+  .stat{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--muted-2);
+  }
+  .stat b{ color: var(--good); font-weight: 600; }
+
+  footer{
+    margin-top: 32px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted-2);
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div class="hexbg" id="hexbg"></div>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow-row">
+      <svg class="hex-icon" viewBox="0 0 100 100" fill="none">
+        <polygon points="50,3 93,26 93,74 50,97 7,74 7,26" stroke="var(--gold)" stroke-width="5"/>
+      </svg>
+      <span class="kicker">Bee-sic Math · Apis mellifera comb model</span>
+    </div>
+    <h1>Hive cell &amp; honey yield estimator</h1>
+    <p class="sub">Estimates the number of honeycomb cells and the honey a hive can yield, using the generalized frame equation from <em>Bee-sic Math: Modeling the Approximate Number of Honeycomb Cells in Apis mellifera Beehive Frames</em> (Blanker, Gonzales &amp; Rodriguez, 2026).</p>
+  </header>
+
+  <div class="panel">
+    <div class="field">
+      <div class="field-label">
+        <label for="frames">Number of frames</label>
+        <span class="value-badge" id="frames-val">10</span>
+      </div>
+      <input type="range" id="frames" min="1" max="40" value="10" step="1">
+      <p class="field-note">A standard Langstroth deep box holds 8–10 frames; a full hive stack may have several boxes.</p>
+    </div>
+
+    <div class="field">
+      <div class="field-label">
+        <label>Comb age</label>
+        <span class="value-badge" id="age-val">3 yrs</span>
+      </div>
+      <div class="age-row" id="age-row">
+        <button class="age-btn active" data-age="3">3 years</button>
+        <button class="age-btn" data-age="4">4 years</button>
+        <button class="age-btn" data-age="5">5 years</button>
+        <button class="age-btn" data-age="6">6 years</button>
+      </div>
+      <p class="field-note">Older comb holds less honey per cell — accumulated cocoon silk narrows each cell over time (Al-Kahtani &amp; Taha, 2021). The source study measured combs aged 3–6 years.</p>
+    </div>
+
+    <button class="adv-toggle" id="adv-toggle">
+      <svg viewBox="0 0 10 10"><path d="M2 1 L8 5 L2 9" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Adjust frame dimensions
+    </button>
+    <div class="adv-body" id="adv-body">
+      <div class="adv-field">
+        <label>Comb area per frame (both sides)</label>
+        <input type="number" id="frame-area" value="87777" step="100">
+      </div>
+      <div class="adv-field">
+        <label>Units</label>
+        <input type="text" value="mm²" disabled style="opacity:.6; width:70px; text-align:center;">
+      </div>
+      <button class="adv-reset" id="adv-reset">Reset to study average</button>
+    </div>
+  </div>
+
+  <div class="results">
+    <div class="result-card">
+      <div class="result-label">Estimated beehive cells</div>
+      <div class="result-value" id="out-cells">—</div>
+      <div class="result-sub">Across all frames · N<sub>frame</sub> = 2KLW per frame</div>
+    </div>
+    <div class="result-card">
+      <div class="result-label">Estimated honey yield</div>
+      <div class="result-value" id="out-honey">—<span class="result-unit">mL</span></div>
+      <div class="result-sub" id="out-honey-sub">Per harvest, at the selected comb age</div>
+    </div>
+  </div>
+
+  <details class="method">
+    <summary>How this is calculated <span class="chev">+</span></summary>
+    <div class="method-body">
+      <h4>1 · Cells per frame</h4>
+      <p>The frame's comb area (both sides) is multiplied by an empirical constant K, which folds in how much of the frame the comb actually covers and how irregular real cells are compared to a perfect hexagon:</p>
+      <div class="formula">N_frame = 2 × K × L × W&nbsp;&nbsp;(K = 3.683 × 10⁻²)</div>
+      <p>K was derived from photographing and measuring 10 real hive frames (300 sampled cells), combining an area-fraction constant (C ≈ 0.874) and an irregularity-correction factor (I ≈ 0.642), divided by the average cell area (≈15.24 mm²).</p>
+      <div class="formula">Total cells = N_frame × Number of frames</div>
+
+      <h4>2 · Honey volume by comb age</h4>
+      <p>Not every cell stores honey — some hold brood or pollen — and the volume each storage cell can hold shrinks as comb ages. The paper computes this per hive by multiplying estimated cells by the ratio of storage cells to total cells, then by the volume a cell of that age can hold, and summing across frames:</p>
+      <div class="formula">V_hive = Σ (N_frame × N_storage⁄N_actual) × V_age</div>
+      <p>This calculator uses the average mL-per-cell rate the study's own 10-frame trial produced at each comb age (aggregated from its honey-yield tables), applied to your estimated cell count:</p>
+      <ul>
+        <li>3 years: ≈ 0.0416 mL/cell</li>
+        <li>4 years: ≈ 0.0395 mL/cell</li>
+        <li>5 years: ≈ 0.0382 mL/cell</li>
+        <li>6 years: ≈ 0.0341 mL/cell</li>
+      </ul>
+
+      <h4>Model accuracy (from the paper's validation)</h4>
+      <div class="stat-row">
+        <span class="stat">MAPE <b>7.81%</b></span>
+        <span class="stat">MAE <b>485.7 cells</b></span>
+        <span class="stat">RMSE <b>549.4</b></span>
+        <span class="stat">Honey yield error <b>4.06%</b></span>
+      </div>
+      <p>The default frame comb area (87,777 mm²) is the average inner-frame area measured across the study's 10 sample frames; adjust it above if your frames differ.</p>
+    </div>
+  </details>
+
+  <footer>
+    Model source: Blanker, Gonzales &amp; Rodriguez (2026), <em>Bee-sic Math</em>, Regional Science &amp; Technology Fair. Estimates only — actual yield varies with colony strength, forage, and season.
+  </footer>
+</div>
+
+<script>
+  // Build hex background pattern as data-URI SVG, theme-aware via currentColor trick isn't available in bg-image,
+  // so we bake two versions and swap based on computed style.
+  function hexPatternFor(color){
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='84' height='96' viewBox='0 0 84 96'>
+      <polygon points='21,2 63,2 84,25 84,50 63,73 21,73 0,50 0,25' fill='none' stroke='${color}' stroke-width='1'/>
+    </svg>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  }
+  function applyHexBg(){
+    const styles = getComputedStyle(document.documentElement);
+    const hairline = styles.getPropertyValue('--hairline').trim() || '#4a3319';
+    document.documentElement.style.setProperty('--hex-pattern', hexPatternFor(hairline));
+    const gold = styles.getPropertyValue('--gold').trim() || '#e7a83a';
+    const resultHex = `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='110' height='110'><polygon points='55,6 100,30 100,80 55,104 10,80 10,30' fill='none' stroke='${gold}' stroke-width='3' opacity='0.5'/></svg>`)}")`;
+    document.documentElement.style.setProperty('--result-hex', resultHex);
+  }
+  applyHexBg();
+
+  const K = 0.03683017483;
+  const HONEY_RATE = { 3: 0.04158303111805373, 4: 0.03953185020956741, 5: 0.03822655327342747, 6: 0.03412419145645483 };
+  const DEFAULT_AREA = 87777.4713;
+
+  const framesEl = document.getElementById('frames');
+  const framesVal = document.getElementById('frames-val');
+  const ageRow = document.getElementById('age-row');
+  const ageVal = document.getElementById('age-val');
+  const areaInput = document.getElementById('frame-area');
+  const outCells = document.getElementById('out-cells');
+  const outHoney = document.getElementById('out-honey');
+  const outHoneySub = document.getElementById('out-honey-sub');
+
+  let selectedAge = 3;
+
+  function fmt(n){
+    return Math.round(n).toLocaleString('en-US');
+  }
+  function fmt1(n){
+    return n.toLocaleString('en-US', {maximumFractionDigits: 1});
+  }
+
+  function recalc(){
+    const frames = parseInt(framesEl.value, 10) || 0;
+    const area = parseFloat(areaInput.value) || DEFAULT_AREA;
+    const perFrame = 2 * K * area;
+    const totalCells = perFrame * frames;
+    const rate = HONEY_RATE[selectedAge];
+    const honeyML = totalCells * rate;
+
+    outCells.textContent = fmt(totalCells);
+    outHoney.innerHTML = fmt1(honeyML) + '<span class="result-unit">mL</span>';
+    outHoneySub.textContent = `At ${selectedAge}-year comb age · ≈ ${(honeyML/1000).toFixed(2)} L per harvest`;
+  }
+
+  framesEl.addEventListener('input', () => {
+    framesVal.textContent = framesEl.value;
+    recalc();
+  });
+
+  ageRow.addEventListener('click', (e) => {
+    const btn = e.target.closest('.age-btn');
+    if(!btn) return;
+    document.querySelectorAll('.age-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedAge = parseInt(btn.dataset.age, 10);
+    ageVal.textContent = selectedAge + ' yrs';
+    recalc();
+  });
+
+  areaInput.addEventListener('input', recalc);
+
+  const advToggle = document.getElementById('adv-toggle');
+  const advBody = document.getElementById('adv-body');
+  advToggle.addEventListener('click', () => {
+    advToggle.classList.toggle('open');
+    advBody.classList.toggle('open');
+  });
+
+  document.getElementById('adv-reset').addEventListener('click', () => {
+    areaInput.value = Math.round(DEFAULT_AREA);
+    recalc();
+  });
+
+  recalc();
+</script>
+</body>
+</html>
+
